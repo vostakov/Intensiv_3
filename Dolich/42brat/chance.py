@@ -6,9 +6,6 @@ import matplotlib.pyplot as plt
 from catboost import CatBoostRegressor
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
-train_data = pd.DataFrame()
-future_df = pd.DataFrame()
-
 train_data = pd.read_excel('C:/Users/User/Documents/GitHub/Intensiv_3/Dataset/data/train.xlsx')
 train_data['dt'] = pd.to_datetime(train_data['dt'])
 train_data['День'] = train_data['dt'].dt.day
@@ -18,6 +15,8 @@ train_data['ДеньНедели'] = train_data['dt'].dt.dayofweek
 train_data['ЦенаL1'] = train_data['Цена на арматуру'].shift(1)
 train_data['ЦенаL2'] = train_data['Цена на арматуру'].shift(2)
 train_data.dropna(inplace=True)
+
+future_df = pd.DataFrame()
 
 def train_and_predict():
     global future_df
@@ -57,22 +56,22 @@ def train_and_predict():
 
 def plot_graph():
     global future_df
-    fig, ax = plt.subplots(figsize=(10, 5))
-    
-    ax.plot(train_data['dt'], train_data['Цена на арматуру'], label='Исторические данные', color='blue')
-    ax.plot(future_df['dt'], future_df['Цена на арматуру'], label='Предсказанные цены', color='red', linestyle='-', linewidth=2)
+    for widget in graph_frame.winfo_children():
+        widget.destroy()
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(train_data['dt'], train_data['Цена на арматуру'], label='Исторические данные', color='blue', linewidth=2)  # Толщина линии 2
+    ax.plot(future_df['dt'], future_df['Цена на арматуру'], label='Предсказанные цены', color='red', linestyle='-', linewidth=2)  # Красная линия, толщина 2, сплошная
     ax.set_title('Прогноз цен на арматуру')
     ax.set_xlabel('Дата')
     ax.set_ylabel('Цена на арматуру')
     ax.legend()
     ax.grid()
 
-    for widget in graph_frame.winfo_children():
-        widget.destroy()
-
-    canvas = FigureCanvasTkAgg(fig, graph_frame)
+    # Отображаем график в Tkinter
+    canvas = FigureCanvasTkAgg(fig, master=graph_frame)
     canvas.draw()
-    canvas.get_tk_widget().pack()
+    canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
 def display_predictions():
     global future_df
@@ -82,16 +81,13 @@ def display_predictions():
     table = ttk.Treeview(table_frame, columns=("Дата", "Цена на арматуру"), show="headings", height=10)
     table.heading("Дата", text="Дата")
     table.heading("Цена на арматуру", text="Цена на арматуру")
-    table.grid(row=0, column=0, padx=10, pady=10)
+    table.pack(fill=tk.BOTH, expand=True)
 
     for _, row in future_df.iterrows():
         table.insert("", "end", values=(row["dt"].strftime('%Y-%m-%d'), row["Цена на арматуру"]))
 
     export_button = tk.Button(table_frame, text="Экспортировать в Excel", command=export_to_excel)
-    export_button.grid(row=1, column=0, padx=10, pady=10)
-
-    back_button = tk.Button(table_frame, text="Вернуться", command=reset_app)
-    back_button.grid(row=2, column=0, padx=10, pady=10)
+    export_button.pack(pady=5)
 
 def export_to_excel():
     try:
@@ -102,40 +98,28 @@ def export_to_excel():
     except Exception as e:
         messagebox.showerror("Error", f"Ошибка при экспорте данных: {e}")
 
-def reset_app():
-    global future_df
-    future_df = pd.DataFrame()
-    for widget in graph_frame.winfo_children():
-        widget.destroy()
-    for widget in table_frame.winfo_children():
-        widget.destroy()
-    start_screen()
-
-def start_screen():
-    for widget in root.winfo_children():
-        widget.grid_forget()
-
-    label = tk.Label(root, text="Выберите количество недель для прогноза:", font=("Arial", 14))
-    label.grid(row=0, column=0, padx=10, pady=10)
-
-    global week_choice
-    week_choice = ttk.Combobox(root, values=[1, 2, 3, 4, 5, 6], state="readonly", font=("Arial", 12))
-    week_choice.grid(row=1, column=0, padx=10, pady=10)
-    week_choice.set(1)
-
-    predict_button = tk.Button(root, text="Прогнозировать", font=("Arial", 12), command=train_and_predict)
-    predict_button.grid(row=2, column=0, padx=10, pady=10)
-
 root = tk.Tk()
 root.title("Прогноз цен на арматуру")
-root.geometry("800x600")
+root.state('zoomed')
 
-start_screen()
+control_frame = tk.Frame(root)
+control_frame.pack(fill=tk.X, padx=10, pady=10)
 
-graph_frame = tk.Frame(root)
-graph_frame.grid(row=0, column=1, rowspan=4, padx=10, pady=10)
+tk.Label(control_frame, text="Выберите количество недель для прогноза:", font=("Arial", 12)).pack(side=tk.LEFT, padx=5)
 
-table_frame = tk.Frame(root)
-table_frame.grid(row=0, column=0, padx=10, pady=10)
+week_choice = ttk.Combobox(control_frame, values=[1, 2, 3, 4, 5, 6], state="readonly", font=("Arial", 12))
+week_choice.pack(side=tk.LEFT, padx=5)
+week_choice.set(1)
+
+tk.Button(control_frame, text="Прогнозировать", font=("Arial", 12), command=train_and_predict).pack(side=tk.LEFT, padx=5)
+
+main_frame = tk.Frame(root)
+main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+graph_frame = tk.Frame(main_frame)
+graph_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+table_frame = tk.Frame(main_frame)
+table_frame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
 
 root.mainloop()
