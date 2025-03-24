@@ -1,10 +1,11 @@
-#это первая версия приложения на модели catboostregressor
+#это вторая версия приложения на ARIMA
+
 import tkinter as tk
 from tkinter import messagebox, ttk, filedialog
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from catboost import CatBoostRegressor
+from statsmodels.tsa.arima.model import ARIMA
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 train_data = pd.read_excel('C:/Users/User/Documents/GitHub/Intensiv_3/Dataset/data/train.xlsx')
@@ -28,26 +29,20 @@ def train_and_predict():
             messagebox.showwarning("Warning", "Количество недель должно быть от 1 до 6!")
             return
 
-        X_train = train_data[['День', 'Месяц', 'Год', 'ДеньНедели', 'ЦенаL1', 'ЦенаL2']]
         y_train = train_data['Цена на арматуру']
-        model = CatBoostRegressor(iterations=500, learning_rate=0.1, depth=6, silent=True)
-        model.fit(X_train, y_train)
+        model = ARIMA(y_train, order=(3, 1, 2))  # Параметры ARIMA, которые вы используете
+        model_fit = model.fit()
 
         future_dates = pd.date_range(start=train_data['dt'].max() + pd.Timedelta(days=1), periods=weeks, freq='W-MON')
 
-        future_data = pd.DataFrame({
-            'День': future_dates.day,
-            'Месяц': future_dates.month,
-            'Год': future_dates.year,
-            'ДеньНедели': future_dates.dayofweek,
-            'ЦенаL1': train_data['Цена на арматуру'].iloc[-1],  
-            'ЦенаL2': train_data['Цена на арматуру'].iloc[-1]   
-        })
+        future_predictions = model_fit.forecast(steps=weeks)
 
-        future_predictions = model.predict(future_data)
-        future_df = pd.DataFrame({'dt': future_dates, 'Цена на арматуру': future_predictions})
+        # Добавляем первую точку вручную
+        first_forecast_point = y_train.iloc[-1]  # Берём последнее значение как начало
+        future_dates = [train_data['dt'].iloc[-1]] + list(future_dates)  # Добавляем последнюю известную дату к будущим датам
+        full_predictions = [first_forecast_point] + list(future_predictions)
 
-        future_df.iloc[0, 1] = train_data['Цена на арматуру'].iloc[-1] 
+        future_df = pd.DataFrame({'dt': future_dates, 'Цена на арматуру': full_predictions})
 
         plot_graph()
         display_predictions()
@@ -61,11 +56,8 @@ def plot_graph():
         widget.destroy()
 
     fig, ax = plt.subplots(figsize=(10, 4))
-    
     ax.plot(train_data['dt'], train_data['Цена на арматуру'], label='Исторические данные', color='blue', linewidth=2)
-    
     ax.plot(future_df['dt'], future_df['Цена на арматуру'], label='Предсказанные цены', color='red', linestyle='-', linewidth=2)
-    
     ax.set_title('Прогноз цен на арматуру')
     ax.set_xlabel('Дата')
     ax.set_ylabel('Цена на арматуру')
