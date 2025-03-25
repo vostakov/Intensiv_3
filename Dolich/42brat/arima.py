@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from statsmodels.tsa.arima.model import ARIMA
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import pickle
+from PIL import Image, ImageTk
 
 train_data = pd.read_excel('C:/Users/User/Documents/GitHub/Intensiv_3/Dataset/data/train.xlsx')
 train_data['dt'] = pd.to_datetime(train_data['dt'])
@@ -29,6 +30,8 @@ def save_formulas():
         pickle.dump(formulas_cache, f)
 
 formulas_cache = load_saved_formulas()
+
+selected_formula_choice = "Классическая формула"
 
 def train_and_predict():
     global future_df
@@ -56,9 +59,17 @@ def plot_graph(weeks):
         widget.destroy()
 
     fig, ax = plt.subplots(figsize=(8, 4))
-    ax.plot(train_data.index, train_data['Цена на арматуру'], label='Исторические данные', color='blue', linewidth=2)
+
+    last_6_weeks = train_data.tail(6)
+    ax.plot(last_6_weeks.index, last_6_weeks['Цена на арматуру'], label='Последние 6 недель', color='blue', linewidth=2)
+
     ax.plot(future_df['dt'][:weeks], future_df['Цена на арматуру'][:weeks], label='Предсказанные цены', color='red', linestyle='-', linewidth=2)
-    ax.plot([train_data.index[-1], future_df['dt'].iloc[0]], [train_data['Цена на арматуру'].iloc[-1], future_df['Цена на арматуру'].iloc[0]], color='red', linestyle='--', linewidth=2)
+
+    ax.scatter(future_df['dt'][:weeks], future_df['Цена на арматуру'][:weeks], color='red', zorder=5)
+
+    for i in range(weeks):
+        ax.text(future_df['dt'][i], future_df['Цена на арматуру'][i], f"Неделя {i+1}", color='black', fontsize=9, ha='center')
+
     ax.set_title('Прогноз цен на арматуру')
     ax.set_xlabel('Дата')
     ax.set_ylabel('Цена на арматуру')
@@ -70,20 +81,18 @@ def plot_graph(weeks):
     canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
 def display_predictions(weeks):
-    global future_df
     for widget in table_frame.winfo_children():
         widget.destroy()
 
-    table = ttk.Treeview(table_frame, columns=("Дата", "Цена на арматуру"), show="headings", height=10)
-    table.heading("Дата", text="Дата")
-    table.heading("Цена на арматуру", text="Цена на арматуру")
-    table.pack(fill=tk.BOTH, expand=True)
+    predictions_table = tk.Frame(table_frame)
+    predictions_table.pack(fill=tk.BOTH, expand=True)
 
-    for _, row in future_df.iloc[:weeks].iterrows():
-        table.insert("", "end", values=(row["dt"].strftime('%Y-%m-%d'), row["Цена на арматуру"]))
+    tk.Label(predictions_table, text="Дата", font=("Arial", 10)).grid(row=0, column=0, padx=5, pady=5)
+    tk.Label(predictions_table, text="Прогноз цены", font=("Arial", 10)).grid(row=0, column=1, padx=5, pady=5)
 
-    export_button = tk.Button(table_frame, text="Экспортировать в Excel", command=export_to_excel)
-    export_button.pack(pady=5)
+    for i in range(weeks):
+        tk.Label(predictions_table, text=f"{future_df['dt'][i].strftime('%d-%m-%Y')}", font=("Arial", 10)).grid(row=i+1, column=0, padx=5, pady=5)
+        tk.Label(predictions_table, text=f"{future_df['Цена на арматуру'][i]:.2f} ₽", font=("Arial", 10)).grid(row=i+1, column=1, padx=5, pady=5)
 
 def analyze_future_trend(weeks):
     for widget in trend_frame.winfo_children():
@@ -122,9 +131,9 @@ def analyze_future_trend(weeks):
         messagebox.showerror("Error", "Пожалуйста, введите корректный бюджет для закупки и количество тонн.")
 
 def calculate_profit_or_loss(budget, current_price, week_6_price, quantity):
-    if selected_formula.get() == "Классическая формула":
+    if selected_formula_choice == "Классическая формула":
         return (week_6_price - current_price) * quantity
-    elif selected_formula.get() == "Своя формула":
+    elif selected_formula_choice == "Своя формула":
         try:
             custom_formula = custom_formula_text.get("1.0", tk.END).strip()
             result = eval(custom_formula)
@@ -171,15 +180,64 @@ def show_classic_formula_description():
                    "Прибыль/убыток = (Прогнозируемая цена через 6 недель - Текущая цена) * Количество закупленной арматуры.")
     messagebox.showinfo("Классическая формула", description)
 
+def open_formulas_menu():
+    global formulas_menu
+    formulas_menu = tk.Toplevel(root)
+    formulas_menu.title("Меню формул")
+    formulas_menu.geometry("500x500")
+
+    formulas_frame = tk.Frame(formulas_menu)
+    formulas_frame.pack(pady=20)
+
+    tk.Label(formulas_frame, text="Сохранённые формулы:", font=("Arial", 12)).pack()
+
+    global formulas_listbox
+    formulas_listbox = tk.Listbox(formulas_frame, height=6, font=("Arial", 10))
+    formulas_listbox.pack(fill=tk.BOTH, expand=True, pady=5)
+
+    update_formulas_list()
+
+    global formula_name_entry
+    formula_name_entry = tk.Entry(formulas_frame, font=("Arial", 10), width=20)
+    formula_name_entry.pack(pady=5)
+
+    global custom_formula_text
+    custom_formula_text = tk.Text(formulas_frame, font=("Arial", 10), width=40, height=6)
+    custom_formula_text.pack(pady=5)
+
+    tk.Button(formulas_menu, text="Сохранить формулу", font=("Arial", 10), command=save_custom_formula).pack(pady=5)
+    tk.Button(formulas_menu, text="Удалить формулу", font=("Arial", 10), command=delete_custom_formula).pack(pady=5)
+    tk.Button(formulas_menu, text="Описание классической формулы", font=("Arial", 10), command=show_classic_formula_description).pack(pady=5)
+
+    tk.Label(formulas_menu, text="Выберите формулу для прогноза:", font=("Arial", 12)).pack(pady=5)
+
+    global selected_formula
+    selected_formula = ttk.Combobox(formulas_menu, values=["Классическая формула"] + list(formulas_cache.keys()), state="readonly", font=("Arial", 10), width=20)
+    selected_formula.set("Классическая формула")
+    selected_formula.pack(pady=5)
+
+    selected_formula.bind("<<ComboboxSelected>>", update_selected_formula)
+
+def update_selected_formula(event=None):
+    global selected_formula_choice
+    selected_formula_choice = selected_formula.get()
+
 root = tk.Tk()
-root.title("Прогноз цен на арматуру")
-root.geometry("900x800")  
+root.title("Программа прогнозирования")
+root.geometry("900x800")
 
 main_frame = tk.Frame(root)
 main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
 control_frame = tk.Frame(main_frame)
 control_frame.pack(fill=tk.X, padx=10, pady=10)
+
+calc_icon = Image.open("C:/Users/User/Documents/GitHub/Intensiv_3/Dolich/42brat/calculator_icon.png")
+calc_icon = calc_icon.resize((30, 30))
+calc_icon = ImageTk.PhotoImage(calc_icon)
+
+calc_button = tk.Button(control_frame, image=calc_icon, command=open_formulas_menu, width=30, height=30)
+calc_button.pack(side=tk.LEFT, padx=5)
 
 tk.Label(control_frame, text="Выберите недели:", font=("Arial", 10)).pack(side=tk.LEFT, padx=5)
 week_choice = ttk.Combobox(control_frame, values=[1, 2, 3, 4, 5, 6], state="readonly", font=("Arial", 10), width=5)
@@ -194,50 +252,19 @@ tk.Label(control_frame, text="Кол-во тонн:", font=("Arial", 10)).pack(s
 quantity_entry = tk.Entry(control_frame, font=("Arial", 10), width=10)
 quantity_entry.pack(side=tk.LEFT, padx=5)
 
-tk.Label(control_frame, text="Формула прибыли:", font=("Arial", 10)).pack(side=tk.LEFT, padx=5)
-selected_formula = ttk.Combobox(control_frame, values=["Классическая формула", "Своя формула"], state="readonly", font=("Arial", 10), width=15)
-selected_formula.pack(side=tk.LEFT, padx=5)
-selected_formula.set("Классическая формула")
+predict_button = tk.Button(control_frame, text="Прогнозировать", font=("Arial", 10), command=train_and_predict)
+predict_button.pack(side=tk.LEFT, padx=5)
 
-question_button = ttk.Button(control_frame, text="?", command=show_classic_formula_description)
-question_button.pack(side=tk.LEFT, padx=5)
-
-tk.Button(control_frame, text="Прогнозировать", font=("Arial", 10), command=train_and_predict).pack(side=tk.LEFT, padx=5)
-
-custom_formula_frame = tk.Frame(main_frame)
-custom_formula_frame.pack(fill=tk.X, padx=10, pady=10)
-
-tk.Label(custom_formula_frame, text="Введите свою формулу:", font=("Arial", 10)).pack()
-
-custom_formula_text = tk.Text(custom_formula_frame, height=3, font=("Arial", 10), width=40)
-custom_formula_text.pack(fill=tk.X, pady=5)
-
-tk.Label(custom_formula_frame, text="Название формулы:", font=("Arial", 10)).pack()
-
-formula_name_entry = tk.Entry(custom_formula_frame, font=("Arial", 10), width=40)
-formula_name_entry.pack(fill=tk.X, pady=5)
-
-tk.Button(custom_formula_frame, text="Сохранить формулу", font=("Arial", 10), command=save_custom_formula).pack(side=tk.LEFT, padx=5)
-
-tk.Button(custom_formula_frame, text="Удалить формулу", font=("Arial", 10), command=delete_custom_formula).pack(side=tk.LEFT, padx=5)
-
-formulas_frame = tk.Frame(main_frame)
-formulas_frame.pack(fill=tk.X, padx=10, pady=10)
-
-tk.Label(formulas_frame, text="Сохранённые формулы:", font=("Arial", 10)).pack()
-
-formulas_listbox = tk.Listbox(formulas_frame, height=6, font=("Arial", 10))
-formulas_listbox.pack(fill=tk.BOTH, expand=True, pady=5)
-
-update_formulas_list()
+export_button = tk.Button(control_frame, text="Экспортировать в Excel", font=("Arial", 10), command=export_to_excel)
+export_button.pack(side=tk.LEFT, padx=5)
 
 graph_frame = tk.Frame(main_frame)
-graph_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-
-trend_frame = tk.Frame(main_frame)
-trend_frame.pack(fill=tk.X, padx=10, pady=10)
+graph_frame.pack(fill=tk.BOTH, expand=True)
 
 table_frame = tk.Frame(main_frame)
-table_frame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
+table_frame.pack(fill=tk.BOTH, expand=True)
+
+trend_frame = tk.Frame(main_frame)
+trend_frame.pack(fill=tk.BOTH, expand=True)
 
 root.mainloop()
